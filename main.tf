@@ -20,7 +20,7 @@ resource "null_resource" "swaggereditor_cleanup" {
 resource "helm_release" "swaggereditor" {
   depends_on = [null_resource.swaggereditor_cleanup]
 
-  name         = "swaggereditor"
+  name         = local.name
   repository   = "https://ibm-garage-cloud.github.io/toolkit-charts/"
   chart        = "swaggereditor"
   version      = var.chart_version
@@ -50,6 +50,18 @@ resource "helm_release" "swaggereditor" {
   }
 }
 
+resource null_resource wait-for-deploy {
+  depends_on = [helm_release.swaggereditor]
+
+  provisioner "local-exec" {
+    command = "${path.module}/scripts/wait-for-deployments.sh ${local.name} ${var.releases_namespace}"
+
+    environment = {
+      KUBECONFIG = var.cluster_config_file
+    }
+  }
+}
+
 resource "null_resource" "delete-consolelink" {
   count = var.cluster_type != "kubernetes" ? 1 : 0
 
@@ -63,7 +75,7 @@ resource "null_resource" "delete-consolelink" {
 }
 
 resource "helm_release" "apieditor-config" {
-  depends_on = [helm_release.swaggereditor, null_resource.delete-consolelink]
+  depends_on = [null_resource.wait-for-deploy, null_resource.delete-consolelink]
 
   name         = "apieditor"
   repository   = "https://ibm-garage-cloud.github.io/toolkit-charts/"
